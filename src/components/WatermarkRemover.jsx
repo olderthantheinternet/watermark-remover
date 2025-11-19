@@ -100,11 +100,18 @@ function WatermarkRemover() {
           console.log('Cloudinary upload successful:', result)
           
           // Cloudinary returns secure_url (HTTPS) or url (HTTP)
-          const videoUrl = result.secure_url || result.url
+          // Use secure_url for better compatibility with APIs
+          let videoUrl = result.secure_url || result.url
           if (videoUrl) {
-            setStatus('Uploaded to Cloudinary successfully')
-            console.log('Cloudinary video URL:', videoUrl)
-            return videoUrl
+            // Ensure the URL is in a format that APIs can access
+            // Cloudinary URLs should work, but let's make sure it's the direct video URL
+            // Remove any transformation parameters if present (keep the base URL)
+            if (videoUrl.includes('/upload/')) {
+              // This is already a direct video URL, good
+              setStatus('Uploaded to Cloudinary successfully')
+              console.log('Cloudinary video URL:', videoUrl)
+              return videoUrl
+            }
           }
         } else {
           const errorData = await response.json().catch(() => ({}))
@@ -281,6 +288,7 @@ function WatermarkRemover() {
       
       console.log('Segmind API request sent. Response status:', response.status)
 
+      // Handle errors, with retry logic for Internal Polling Error
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: response.statusText }))
         let errorMessage = 'Failed to process video'
@@ -295,12 +303,56 @@ function WatermarkRemover() {
         // Handle specific error codes
         if (response.status === 401) {
           errorMessage = 'Invalid API key. Please check your VITE_SEGMIND_API_KEY.'
+          throw new Error(errorMessage)
         } else if (response.status === 403) {
           errorMessage = 'Access forbidden. Check your API key permissions.'
+          throw new Error(errorMessage)
         } else if (response.status === 406) {
           errorMessage = 'Insufficient credits. Please add credits to your Segmind account.'
+          throw new Error(errorMessage)
         } else if (response.status === 429) {
           errorMessage = 'Rate limit exceeded. Please try again later.'
+          throw new Error(errorMessage)
+        } else if (response.status === 400) {
+          // 400 Bad Request - could be various issues
+          if (errorData.error === 'Internal Polling Error') {
+            // Internal Polling Error usually means Segmind can't access or process the video
+            // Try retrying once, as it might be a temporary issue
+            console.log('Internal Polling Error detected. Retrying once...')
+            setStatus('Retrying video processing...')
+            await new Promise(resolve => setTimeout(resolve, 2000)) // Wait 2 seconds
+            
+            const retryResponse = await fetch(endpointUsed, {
+              method: 'POST',
+              headers: {
+                'x-api-key': apiKey,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                input_video: finalUrl,
+                base64: false
+              })
+            })
+            
+            if (retryResponse.ok) {
+              // Retry succeeded, replace response and continue processing
+              response = retryResponse
+              console.log('Retry successful! Continuing with processing...')
+              // Continue to processing section below (skip error throwing)
+            } else {
+              const retryError = await retryResponse.json().catch(() => ({}))
+              errorMessage = 'Video processing failed after retry. This may be due to:\n' +
+                '- Video URL not accessible from Segmind servers\n' +
+                '- Video format not fully supported\n' +
+                '- Video too large or processing timeout\n' +
+                '- Cloudinary URL access restrictions\n\n' +
+                'Try: Using a different video, checking video format (MP4 recommended), or contacting Segmind support.'
+              throw new Error(errorMessage)
+            }
+          } else {
+            errorMessage = errorData.error || errorData.message || 'Bad request. Check video URL and format.'
+            throw new Error(errorMessage)
+          }
         } else if (errorData.message || errorData.error) {
           errorMessage = errorData.message || errorData.error
           // If it's a video duration error with tmpfiles.org, try the direct URL format as fallback
@@ -344,6 +396,7 @@ function WatermarkRemover() {
             
             errorMessage += ' The video URL may not be accessible from Segmind\'s servers. This could be due to network restrictions or the temporary hosting service blocking API access. Try using 0x0.st or file.io instead, or set up your own file hosting.'
           }
+          throw new Error(errorMessage)
         }
         
         throw new Error(errorMessage)
