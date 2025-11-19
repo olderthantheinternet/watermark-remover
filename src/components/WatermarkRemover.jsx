@@ -307,19 +307,59 @@ function WatermarkRemover() {
       setProgress(60)
       setStatus('Processing video (this may take a few minutes)...')
 
-      const result = await response.json()
+      // Check the content type to determine if it's JSON or binary video data
+      const contentType = response.headers.get('content-type') || ''
+      console.log('Response content-type:', contentType)
       
-      // Segmind API returns the processed video URL directly
-      if (result.output || result.video_url || result.url) {
-        const processedUrl = result.output || result.video_url || result.url
+      let processedUrl = null
+      
+      // Clone the response so we can read it multiple times if needed
+      const responseClone = response.clone()
+      
+      if (contentType.includes('application/json')) {
+        // JSON response with URL
+        const result = await response.json()
+        console.log('Segmind API JSON response:', result)
         
+        if (result.output || result.video_url || result.url) {
+          processedUrl = result.output || result.video_url || result.url
+        } else {
+          console.log('Unexpected JSON response structure:', result)
+          throw new Error('Unexpected response format from Segmind API. Check console for details.')
+        }
+      } else {
+        // Try to parse as JSON first (in case content-type is wrong)
+        try {
+          const text = await response.text()
+          // Check if it looks like JSON (starts with { or [)
+          if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+            const result = JSON.parse(text)
+            console.log('Segmind API JSON response (parsed from text):', result)
+            
+            if (result.output || result.video_url || result.url) {
+              processedUrl = result.output || result.video_url || result.url
+            } else {
+              throw new Error('Unexpected response format from Segmind API.')
+            }
+          } else {
+            // Not JSON, must be binary video data
+            throw new Error('Not JSON')
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, it's binary video data
+          console.log('Response is binary video data, creating blob URL')
+          const videoBlob = await responseClone.blob()
+          processedUrl = URL.createObjectURL(videoBlob)
+          console.log('Created blob URL from video data:', processedUrl)
+        }
+      }
+      
+      if (processedUrl) {
         setProgress(100)
         setStatus('Watermark removed successfully!')
         setProcessedVideoUrl(processedUrl)
       } else {
-        // If response structure is different, log it for debugging
-        console.log('Segmind API response:', result)
-        throw new Error('Unexpected response format from Segmind API. Check console for details.')
+        throw new Error('Failed to get processed video URL from Segmind API.')
       }
 
     } catch (err) {
