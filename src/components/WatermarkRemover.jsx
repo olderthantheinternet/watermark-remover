@@ -74,6 +74,12 @@ function WatermarkRemover() {
     const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
     const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
     
+    console.log('Cloudinary config check:', {
+      cloudName: cloudName ? 'set' : 'not set',
+      uploadPreset: uploadPreset ? 'set' : 'not set',
+      fullEnv: import.meta.env
+    })
+    
     // Try Cloudinary first if credentials are configured
     if (cloudName && uploadPreset) {
       try {
