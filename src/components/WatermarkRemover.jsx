@@ -115,15 +115,15 @@ function WatermarkRemover() {
             if (result.status === 'success' && result.data?.url) {
               // tmpfiles.org returns URL in format: https://tmpfiles.org/dl/[id]/filename
               // This is the download page URL. The direct file URL is: https://tmpfiles.org/[id]/filename
-              const originalUrl = result.data.url
-              const directUrl = originalUrl.replace('/dl/', '/')
+              const downloadUrl = result.data.url // Format: https://tmpfiles.org/dl/[id]/filename
+              const directUrl = downloadUrl.replace('/dl/', '/') // Format: https://tmpfiles.org/[id]/filename
               
-              console.log('tmpfiles.org original URL (with /dl/):', originalUrl)
+              console.log('tmpfiles.org download URL (with /dl/):', downloadUrl)
               console.log('tmpfiles.org direct URL (without /dl/):', directUrl)
               
-              // Use the direct URL (without /dl/) as it should provide direct file access
-              // which is what APIs typically need
-              return directUrl
+              // Return the download URL format as it's the official format from tmpfiles.org
+              // and may be more reliable for API access
+              return downloadUrl
             }
           }
           throw new Error('tmpfiles.org upload failed')
@@ -202,14 +202,25 @@ function WatermarkRemover() {
 
       // Step 2: Log the video URL for debugging
       setStatus('Preparing to send video to Segmind...')
+      console.log('=== DEBUG INFO ===')
       console.log('Video URL to send to Segmind:', videoUrl)
       console.log('Video file name:', file.name)
       console.log('Video file size:', (file.size / (1024 * 1024)).toFixed(2), 'MB')
+      console.log('Video file type:', file.type)
+      console.log('==================')
       
-      // Note: We can't easily verify URL accessibility from browser due to CORS,
-      // but Segmind will try to access it. If it fails, we'll get a clear error.
+      // Use the URL as-is from the upload service
+      let finalUrl = videoUrl
+      
+      // For tmpfiles.org, we'll use the download URL format (with /dl/) as it's the official format
+      // If somehow we got a direct URL, convert it to download format
+      if (videoUrl.includes('tmpfiles.org') && !videoUrl.includes('/dl/')) {
+        finalUrl = videoUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/')
+        console.log('Converted tmpfiles.org URL to download format:', finalUrl)
+      }
       
       setStatus('Sending request to Segmind API...')
+      console.log('Final URL being sent:', finalUrl)
       
       // Step 3: Call Segmind API for watermark removal
       const response = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
@@ -219,16 +230,23 @@ function WatermarkRemover() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          input_video: videoUrl,
+          input_video: finalUrl,
           base64: false // Set to true if you want base64 output instead of URL
         })
       })
       
-      console.log('Segmind API request sent. Waiting for response...')
+      console.log('Segmind API request sent. Response status:', response.status)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: response.statusText }))
         let errorMessage = 'Failed to process video'
+        
+        console.error('=== SEGMIND API ERROR ===')
+        console.error('Status:', response.status)
+        console.error('Status Text:', response.statusText)
+        console.error('Error Data:', errorData)
+        console.error('Video URL that was sent:', finalUrl)
+        console.error('========================')
         
         // Handle specific error codes
         if (response.status === 401) {
@@ -241,18 +259,47 @@ function WatermarkRemover() {
           errorMessage = 'Rate limit exceeded. Please try again later.'
         } else if (errorData.message || errorData.error) {
           errorMessage = errorData.message || errorData.error
-          // If it's a video duration error, provide more helpful context
-          if (errorMessage.includes('duration') || errorMessage.includes('Could not determine')) {
-            errorMessage += ' This may mean the video URL is not accessible or the video format is not supported. Try a different video or check the video URL in the browser console.'
+          // If it's a video duration error with tmpfiles.org, try the direct URL format as fallback
+          if ((errorMessage.includes('duration') || errorMessage.includes('Could not determine')) && finalUrl.includes('tmpfiles.org')) {
+            // Try the direct URL format (without /dl/)
+            const directUrlFormat = finalUrl.replace('/dl/', '/')
+            console.log('Duration error detected. Trying direct URL format (without /dl/) as fallback:', directUrlFormat)
+            
+            // Try once more with the direct URL format
+            try {
+              setStatus('Retrying with direct URL format...')
+              const retryResponse = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
+                method: 'POST',
+                headers: {
+                  'x-api-key': apiKey,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  input_video: directUrlFormat,
+                  base64: false
+                })
+              })
+              
+              if (retryResponse.ok) {
+                const retryResult = await retryResponse.json()
+                if (retryResult.output || retryResult.video_url || retryResult.url) {
+                  const processedUrl = retryResult.output || retryResult.video_url || retryResult.url
+                  setProgress(100)
+                  setStatus('Watermark removed successfully!')
+                  setProcessedVideoUrl(processedUrl)
+                  return // Success with fallback URL
+                }
+              } else {
+                const retryError = await retryResponse.json().catch(() => ({}))
+                console.error('Retry with direct URL format also failed:', retryError)
+              }
+            } catch (retryErr) {
+              console.error('Retry with direct URL format also failed:', retryErr)
+            }
+            
+            errorMessage += ' The video URL may not be accessible from Segmind\'s servers. This could be due to network restrictions or the temporary hosting service blocking API access. Try using 0x0.st or file.io instead, or set up your own file hosting.'
           }
         }
-        
-        console.error('Segmind API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorData,
-          videoUrl
-        })
         
         throw new Error(errorMessage)
       }
