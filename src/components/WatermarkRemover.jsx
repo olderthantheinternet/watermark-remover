@@ -110,16 +110,19 @@ function WatermarkRemover() {
           })
           if (response.ok) {
             const result = await response.json()
-            console.log('tmpfiles.org response:', result)
+            console.log('tmpfiles.org full response:', result)
             
             if (result.status === 'success' && result.data?.url) {
               // tmpfiles.org returns URL in format: https://tmpfiles.org/dl/[id]/filename
-              // The direct download URL is: https://tmpfiles.org/[id]/filename (without /dl/)
-              let directUrl = result.data.url
-              if (directUrl.includes('/dl/')) {
-                directUrl = directUrl.replace('/dl/', '/')
-              }
-              console.log('Using tmpfiles.org direct URL:', directUrl)
+              // This is the download page URL. The direct file URL is: https://tmpfiles.org/[id]/filename
+              const originalUrl = result.data.url
+              const directUrl = originalUrl.replace('/dl/', '/')
+              
+              console.log('tmpfiles.org original URL (with /dl/):', originalUrl)
+              console.log('tmpfiles.org direct URL (without /dl/):', directUrl)
+              
+              // Use the direct URL (without /dl/) as it should provide direct file access
+              // which is what APIs typically need
               return directUrl
             }
           }
@@ -197,17 +200,16 @@ function WatermarkRemover() {
       setProgress(30)
       setStatus('Sending request to Segmind API...')
 
-      // Step 2: Verify the video URL is accessible before sending to Segmind
-      setStatus('Verifying video URL...')
-      try {
-        const testResponse = await fetch(videoUrl, { method: 'HEAD', mode: 'no-cors' })
-        // Note: no-cors mode doesn't allow reading response, but it will fail if URL is invalid
-      } catch (err) {
-        console.warn('URL verification warning (may be CORS-related):', err)
-      }
+      // Step 2: Log the video URL for debugging
+      setStatus('Preparing to send video to Segmind...')
+      console.log('Video URL to send to Segmind:', videoUrl)
+      console.log('Video file name:', file.name)
+      console.log('Video file size:', (file.size / (1024 * 1024)).toFixed(2), 'MB')
+      
+      // Note: We can't easily verify URL accessibility from browser due to CORS,
+      // but Segmind will try to access it. If it fails, we'll get a clear error.
       
       setStatus('Sending request to Segmind API...')
-      console.log('Sending video URL to Segmind:', videoUrl)
       
       // Step 3: Call Segmind API for watermark removal
       const response = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
@@ -221,6 +223,8 @@ function WatermarkRemover() {
           base64: false // Set to true if you want base64 output instead of URL
         })
       })
+      
+      console.log('Segmind API request sent. Waiting for response...')
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: response.statusText }))
