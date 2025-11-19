@@ -71,48 +71,92 @@ function WatermarkRemover() {
   // Helper function to upload video to temporary storage and get URL
   // Segmind API requires a video URL, not direct file upload
   const uploadVideoToTempStorage = async (videoFile) => {
-    // Option 1: Try using 0x0.st (free temporary file hosting)
-    try {
-      setStatus('Uploading video to temporary storage...')
-      const formData = new FormData()
-      formData.append('file', videoFile)
-      
-      const uploadResponse = await fetch('https://0x0.st', {
-        method: 'POST',
-        body: formData
-      })
-      
-      if (uploadResponse.ok) {
-        const fileUrl = (await uploadResponse.text()).trim()
-        return fileUrl
-      }
-    } catch (err) {
-      console.warn('0x0.st upload failed, trying alternative...', err)
-    }
+    const formData = new FormData()
+    formData.append('file', videoFile)
+    
+    // Create a timeout promise (30 seconds max)
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
+    )
 
-    // Option 2: Try using file.io as fallback
-    try {
-      const formData = new FormData()
-      formData.append('file', videoFile)
-      
-      const uploadResponse = await fetch('https://file.io', {
-        method: 'POST',
-        body: formData
-      })
-      
-      if (uploadResponse.ok) {
-        const result = await uploadResponse.json()
-        if (result.success && result.link) {
-          return result.link
+    // Try multiple services with timeout
+    const services = [
+      {
+        name: 'tmpfiles.org',
+        url: 'https://tmpfiles.org/api/v1/upload',
+        handler: async () => {
+          const response = await fetch('https://tmpfiles.org/api/v1/upload', {
+            method: 'POST',
+            body: formData
+          })
+          if (response.ok) {
+            const result = await response.json()
+            if (result.status === 'success' && result.data?.url) {
+              // tmpfiles.org returns URL in format: https://tmpfiles.org/dl/[id]/filename
+              // We need to convert it to direct download URL
+              const directUrl = result.data.url.replace('/dl/', '/')
+              return directUrl
+            }
+          }
+          throw new Error('tmpfiles.org upload failed')
+        }
+      },
+      {
+        name: '0x0.st',
+        url: 'https://0x0.st',
+        handler: async () => {
+          const response = await fetch('https://0x0.st', {
+            method: 'POST',
+            body: formData
+          })
+          if (response.ok) {
+            const fileUrl = (await response.text()).trim()
+            if (fileUrl.startsWith('http')) {
+              return fileUrl
+            }
+          }
+          throw new Error('0x0.st upload failed')
+        }
+      },
+      {
+        name: 'file.io',
+        url: 'https://file.io',
+        handler: async () => {
+          const response = await fetch('https://file.io', {
+            method: 'POST',
+            body: formData
+          })
+          if (response.ok) {
+            const result = await response.json()
+            if (result.success && result.link) {
+              return result.link
+            }
+          }
+          throw new Error('file.io upload failed')
         }
       }
-    } catch (err) {
-      console.warn('file.io upload failed', err)
+    ]
+
+    // Try each service with timeout
+    for (const service of services) {
+      try {
+        setStatus(`Uploading to ${service.name}...`)
+        const fileUrl = await Promise.race([
+          service.handler(),
+          timeoutPromise
+        ])
+        setStatus(`Uploaded to ${service.name} successfully`)
+        return fileUrl
+      } catch (err) {
+        console.warn(`${service.name} upload failed:`, err.message)
+        continue
+      }
     }
 
-    // If both fail, throw error with helpful message
+    // If all services fail, throw error with helpful message
     throw new Error(
-      'Failed to upload video to temporary storage. ' +
+      'Failed to upload video to temporary storage after trying multiple services. ' +
+      'This may be due to network issues or service unavailability. ' +
       'For production use, consider setting up a backend endpoint or using a service like Cloudinary. ' +
       'See README.md for more options.'
     )
