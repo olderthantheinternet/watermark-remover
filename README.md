@@ -27,7 +27,23 @@ A browser-based application for removing watermarks (like "pika" or "sora") from
    Create a `.env` file in the root directory:
    ```bash
    VITE_SEGMIND_API_KEY=your_actual_api_key_here
+   VITE_CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+   VITE_CLOUDINARY_UPLOAD_PRESET=your_upload_preset_name
    ```
+   
+   **Cloudinary Setup (Recommended for reliable uploads)**:
+   - Sign up at [Cloudinary](https://cloudinary.com) (free tier available)
+   - Get your Cloud Name from the dashboard
+   - Create an Upload Preset:
+     - Go to Settings → Upload → Upload presets
+     - Click "Add upload preset"
+     - Name it (e.g., "watermark")
+     - Set Signing Mode to "Unsigned" (required for client-side uploads)
+     - Set Resource Type to "Video"
+     - Save the preset
+   - Add the Cloud Name and Preset name to your `.env` file
+   
+   **Note**: If Cloudinary is not configured, the app will fall back to free temporary hosting services (0x0.st, tmpfiles.org, file.io).
 
 4. **Start development server**:
    ```bash

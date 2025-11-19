@@ -71,6 +71,47 @@ function WatermarkRemover() {
   // Helper function to upload video to temporary storage and get URL
   // Segmind API requires a video URL, not direct file upload
   const uploadVideoToTempStorage = async (videoFile) => {
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+    
+    // Try Cloudinary first if credentials are configured
+    if (cloudName && uploadPreset) {
+      try {
+        setStatus('Uploading to Cloudinary...')
+        const formData = new FormData()
+        formData.append('file', videoFile)
+        formData.append('upload_preset', uploadPreset)
+        formData.append('resource_type', 'video')
+        
+        const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/upload`
+        const response = await fetch(cloudinaryUrl, {
+          method: 'POST',
+          body: formData
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          console.log('Cloudinary upload successful:', result)
+          
+          // Cloudinary returns secure_url (HTTPS) or url (HTTP)
+          const videoUrl = result.secure_url || result.url
+          if (videoUrl) {
+            setStatus('Uploaded to Cloudinary successfully')
+            console.log('Cloudinary video URL:', videoUrl)
+            return videoUrl
+          }
+        } else {
+          const errorData = await response.json().catch(() => ({}))
+          console.warn('Cloudinary upload failed:', errorData)
+          throw new Error(errorData.error?.message || 'Cloudinary upload failed')
+        }
+      } catch (err) {
+        console.warn('Cloudinary upload error:', err.message)
+        // Fall through to backup services
+      }
+    }
+    
+    // Fallback to free services if Cloudinary is not configured or fails
     const formData = new FormData()
     formData.append('file', videoFile)
     
@@ -114,15 +155,8 @@ function WatermarkRemover() {
             
             if (result.status === 'success' && result.data?.url) {
               // tmpfiles.org returns URL in format: https://tmpfiles.org/dl/[id]/filename
-              // This is the download page URL. The direct file URL is: https://tmpfiles.org/[id]/filename
-              const downloadUrl = result.data.url // Format: https://tmpfiles.org/dl/[id]/filename
-              const directUrl = downloadUrl.replace('/dl/', '/') // Format: https://tmpfiles.org/[id]/filename
-              
-              console.log('tmpfiles.org download URL (with /dl/):', downloadUrl)
-              console.log('tmpfiles.org direct URL (without /dl/):', directUrl)
-              
-              // Return the download URL format as it's the official format from tmpfiles.org
-              // and may be more reliable for API access
+              const downloadUrl = result.data.url
+              console.log('tmpfiles.org download URL:', downloadUrl)
               return downloadUrl
             }
           }
@@ -166,10 +200,10 @@ function WatermarkRemover() {
 
     // If all services fail, throw error with helpful message
     throw new Error(
-      'Failed to upload video to temporary storage after trying multiple services. ' +
-      'This may be due to network issues or service unavailability. ' +
-      'For production use, consider setting up a backend endpoint or using a service like Cloudinary. ' +
-      'See README.md for more options.'
+      'Failed to upload video to temporary storage. ' +
+      (cloudName && uploadPreset 
+        ? 'Cloudinary upload failed and all fallback services failed. Please check your Cloudinary configuration.'
+        : 'Please configure Cloudinary (VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET) for reliable uploads.')
     )
   }
 
