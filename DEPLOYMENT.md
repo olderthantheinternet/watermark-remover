@@ -11,13 +11,26 @@ This guide will help you deploy the Watermark Remover app to GitHub Pages.
    - **Source**: `GitHub Actions`
 5. Click **Save**
 
-## Step 2: Add GitHub Secret for API Key
+## Step 2: Add GitHub Secrets
 
 1. In your repository, go to **Settings** → **Secrets and variables** → **Actions**
-2. Click **New repository secret**
-3. Name: `VITE_SEGMIND_API_KEY`
-4. Value: Your Segmind API key (e.g., `SG_03e4ec0d6e508d91`)
-5. Click **Add secret**
+2. Add the following secrets (click **New repository secret** for each):
+
+   **Segmind API Key:**
+   - Name: `VITE_SEGMIND_API_KEY`
+   - Value: Your Segmind API key (e.g., `SG_03e4ec0d6e508d91`)
+   - Click **Add secret**
+
+   **Cloudinary Configuration (Recommended):**
+   - Name: `VITE_CLOUDINARY_CLOUD_NAME`
+   - Value: Your Cloudinary cloud name (e.g., `duvfvih63`)
+   - Click **Add secret**
+   
+   - Name: `VITE_CLOUDINARY_UPLOAD_PRESET`
+   - Value: Your Cloudinary upload preset name (e.g., `watermark`)
+   - Click **Add secret**
+
+   **Note**: If Cloudinary secrets are not set, the app will fall back to free temporary hosting services.
 
 ## Step 3: Deploy
 
