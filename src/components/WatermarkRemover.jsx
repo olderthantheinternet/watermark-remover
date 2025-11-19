@@ -279,7 +279,7 @@ function WatermarkRemover() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            input_video: finalUrl,
+            input: finalUrl,  // Parameter name is "input", not "input_video"
             base64: false
           })
         })
@@ -295,7 +295,7 @@ function WatermarkRemover() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              input_video: finalUrl,
+              input: finalUrl,  // Parameter name is "input", not "input_video"
               base64: false
             })
           })
@@ -311,7 +311,7 @@ function WatermarkRemover() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            input_video: finalUrl,
+            input: finalUrl,  // Parameter name is "input", not "input_video"
             base64: false
           })
         })
@@ -362,13 +362,14 @@ function WatermarkRemover() {
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  input_video: directUrlFormat,
+                  input: directUrlFormat,  // Parameter name is "input", not "input_video"
                   base64: false
                 })
               })
               
               if (retryResponse.ok) {
                 const retryResult = await retryResponse.json()
+                // Segmind API returns: { "output": "...", "status": "success" }
                 if (retryResult.output || retryResult.video_url || retryResult.url) {
                   const processedUrl = retryResult.output || retryResult.video_url || retryResult.url
                   setProgress(100)
