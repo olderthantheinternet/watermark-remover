@@ -88,6 +88,8 @@ function WatermarkRemover() {
         formData.append('file', videoFile)
         formData.append('upload_preset', uploadPreset)
         formData.append('resource_type', 'video')
+        // Ensure unsigned access for API compatibility
+        // The upload preset should be configured as "Unsigned" in Cloudinary dashboard
         
         const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/upload`
         const response = await fetch(cloudinaryUrl, {
@@ -100,16 +102,19 @@ function WatermarkRemover() {
           console.log('Cloudinary upload successful:', result)
           
           // Cloudinary returns secure_url (HTTPS) or url (HTTP)
-          // Use secure_url for better compatibility with APIs
+          // Segmind requires HTTPS, so use secure_url
           let videoUrl = result.secure_url || result.url
           if (videoUrl) {
-            // Ensure the URL is in a format that APIs can access
-            // Cloudinary URLs should work, but let's make sure it's the direct video URL
-            // Remove any transformation parameters if present (keep the base URL)
-            if (videoUrl.includes('/upload/')) {
-              // This is already a direct video URL, good
+            // Verify URL format: https://res.cloudinary.com/<cloud_name>/video/upload/...
+            // This format is compatible with Segmind API
+            if (videoUrl.startsWith('https://res.cloudinary.com/') && videoUrl.includes('/video/upload/')) {
               setStatus('Uploaded to Cloudinary successfully')
-              console.log('Cloudinary video URL:', videoUrl)
+              console.log('Cloudinary video URL (HTTPS):', videoUrl)
+              console.log('URL format verified for Segmind compatibility')
+              return videoUrl
+            } else {
+              console.warn('Unexpected Cloudinary URL format:', videoUrl)
+              // Still return it, but log a warning
               return videoUrl
             }
           }
@@ -341,12 +346,17 @@ function WatermarkRemover() {
               // Continue to processing section below (skip error throwing)
             } else {
               const retryError = await retryResponse.json().catch(() => ({}))
-              errorMessage = 'Video processing failed after retry. This may be due to:\n' +
-                '- Video URL not accessible from Segmind servers\n' +
-                '- Video format not fully supported\n' +
-                '- Video too large or processing timeout\n' +
-                '- Cloudinary URL access restrictions\n\n' +
-                'Try: Using a different video, checking video format (MP4 recommended), or contacting Segmind support.'
+              errorMessage = 'Video processing failed after retry. Possible causes:\n' +
+                '1. Cloudinary upload preset must be set to "Unsigned" in Cloudinary dashboard\n' +
+                '2. Video URL not accessible from Segmind servers (check Cloudinary access settings)\n' +
+                '3. Video format not fully supported (MP4 recommended)\n' +
+                '4. Video too large or processing timeout\n' +
+                '5. CORS/referrer restrictions on Cloudinary\n\n' +
+                'Solutions:\n' +
+                '- Verify Cloudinary upload preset is "Unsigned" (Settings → Upload → Upload presets)\n' +
+                '- Check video is publicly accessible (test URL in browser)\n' +
+                '- Try a different video or use fallback services (0x0.st, file.io)\n' +
+                '- Contact Segmind support about Cloudinary compatibility'
               throw new Error(errorMessage)
             }
           } else {

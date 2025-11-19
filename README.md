@@ -38,10 +38,13 @@ A browser-based application for removing watermarks (like "pika" or "sora") from
      - Go to Settings → Upload → Upload presets
      - Click "Add upload preset"
      - Name it (e.g., "watermark")
-     - Set Signing Mode to "Unsigned" (required for client-side uploads)
+     - **IMPORTANT**: Set Signing Mode to "Unsigned" (required for client-side uploads AND Segmind API access)
      - Set Resource Type to "Video"
+     - Ensure "Allow unsigned uploads" is enabled
      - Save the preset
    - Add the Cloud Name and Preset name to your `.env` file
+   
+   **Note**: The upload preset MUST be "Unsigned" for Segmind API to access the uploaded videos. Signed URLs will cause "Internal Polling Error".
    
    **Note**: If Cloudinary is not configured, the app will fall back to free temporary hosting services (0x0.st, tmpfiles.org, file.io).
 
