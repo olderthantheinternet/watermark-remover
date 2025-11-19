@@ -263,17 +263,50 @@ function WatermarkRemover() {
       console.log('Final URL being sent:', finalUrl)
       
       // Step 3: Call Segmind API for watermark removal
-      const response = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          input_video: finalUrl,
-          base64: false // Set to true if you want base64 output instead of URL
-        })
-      })
+      // Try the sora-wm-remover endpoint first (specifically for Sora watermarks)
+      // If that doesn't work, fall back to video-watermark-remover
+      const apiEndpoints = [
+        'https://api.segmind.com/v1/sora-wm-remover',
+        'https://api.segmind.com/v1/video-watermark-remover'
+      ]
+      
+      let response = null
+      let lastError = null
+      
+      for (const endpoint of apiEndpoints) {
+        try {
+          console.log(`Trying Segmind endpoint: ${endpoint}`)
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'x-api-key': apiKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              input_video: finalUrl,
+              base64: false
+            })
+          })
+          
+          if (response.ok) {
+            console.log(`Success with endpoint: ${endpoint}`)
+            break
+          } else {
+            const errorData = await response.json().catch(() => ({}))
+            console.warn(`Endpoint ${endpoint} failed:`, response.status, errorData)
+            lastError = errorData
+            response = null
+          }
+        } catch (err) {
+          console.warn(`Endpoint ${endpoint} error:`, err.message)
+          lastError = err
+          response = null
+        }
+      }
+      
+      if (!response) {
+        throw new Error(`All Segmind endpoints failed. Last error: ${lastError?.message || 'Unknown error'}`)
+      }
       
       console.log('Segmind API request sent. Response status:', response.status)
 
@@ -305,10 +338,10 @@ function WatermarkRemover() {
             const directUrlFormat = finalUrl.replace('/dl/', '/')
             console.log('Duration error detected. Trying direct URL format (without /dl/) as fallback:', directUrlFormat)
             
-            // Try once more with the direct URL format
+            // Try once more with the direct URL format using the sora-wm-remover endpoint
             try {
               setStatus('Retrying with direct URL format...')
-              const retryResponse = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
+              const retryResponse = await fetch('https://api.segmind.com/v1/sora-wm-remover', {
                 method: 'POST',
                 headers: {
                   'x-api-key': apiKey,
@@ -397,6 +430,14 @@ function WatermarkRemover() {
       if (processedUrl) {
         setProgress(100)
         setStatus('Watermark removed successfully!')
+        console.log('=== PROCESSING COMPLETE ===')
+        console.log('Processed video URL:', processedUrl)
+        console.log('Original video URL:', finalUrl)
+        console.log('Endpoint used:', response.url)
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()))
+        console.log('Please compare the videos to verify watermark removal')
+        console.log('Note: If watermark is still visible, the API may have limitations')
+        console.log('===========================')
         setProcessedVideoUrl(processedUrl)
       } else {
         throw new Error('Failed to get processed video URL from Segmind API.')
@@ -533,16 +574,25 @@ function WatermarkRemover() {
 
         {/* Processed Video Preview */}
         {processedVideoUrl && (
-          <div className="space-y-2">
+          <div className="space-y-4">
             <Alert>
               <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription>Watermark removed! Preview your video below.</AlertDescription>
+              <AlertDescription>
+                Video processed! Compare the original (above) with the processed video (below) to see if the watermark was removed.
+                <br />
+                <span className="text-xs text-muted-foreground mt-1 block">
+                  Note: Some watermarks may be difficult to remove completely. If the watermark is still visible, the API may have limitations with this particular watermark type.
+                </span>
+              </AlertDescription>
             </Alert>
-            <video
-              src={processedVideoUrl}
-              controls
-              className="w-full rounded-lg"
-            />
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">Processed Video:</h4>
+              <video
+                src={processedVideoUrl}
+                controls
+                className="w-full rounded-lg"
+              />
+            </div>
           </div>
         )}
 
