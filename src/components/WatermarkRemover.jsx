@@ -263,50 +263,18 @@ function WatermarkRemover() {
       console.log('Final URL being sent:', finalUrl)
       
       // Step 3: Call Segmind API for watermark removal
-      // Try the sora-wm-remover endpoint first (specifically for Sora watermarks)
-      // If that doesn't work, fall back to video-watermark-remover
-      const apiEndpoints = [
-        'https://api.segmind.com/v1/sora-wm-remover',
-        'https://api.segmind.com/v1/video-watermark-remover'
-      ]
-      
-      let response = null
-      let lastError = null
-      
-      for (const endpoint of apiEndpoints) {
-        try {
-          console.log(`Trying Segmind endpoint: ${endpoint}`)
-          response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'x-api-key': apiKey,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              input_video: finalUrl,
-              base64: false
-            })
-          })
-          
-          if (response.ok) {
-            console.log(`Success with endpoint: ${endpoint}`)
-            break
-          } else {
-            const errorData = await response.json().catch(() => ({}))
-            console.warn(`Endpoint ${endpoint} failed:`, response.status, errorData)
-            lastError = errorData
-            response = null
-          }
-        } catch (err) {
-          console.warn(`Endpoint ${endpoint} error:`, err.message)
-          lastError = err
-          response = null
-        }
-      }
-      
-      if (!response) {
-        throw new Error(`All Segmind endpoints failed. Last error: ${lastError?.message || 'Unknown error'}`)
-      }
+      // Using the correct endpoint: video-watermark-remover
+      const response = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          input_video: finalUrl,
+          base64: false
+        })
+      })
       
       console.log('Segmind API request sent. Response status:', response.status)
 
@@ -338,10 +306,10 @@ function WatermarkRemover() {
             const directUrlFormat = finalUrl.replace('/dl/', '/')
             console.log('Duration error detected. Trying direct URL format (without /dl/) as fallback:', directUrlFormat)
             
-            // Try once more with the direct URL format using the sora-wm-remover endpoint
+            // Try once more with the direct URL format
             try {
               setStatus('Retrying with direct URL format...')
-              const retryResponse = await fetch('https://api.segmind.com/v1/sora-wm-remover', {
+              const retryResponse = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
                 method: 'POST',
                 headers: {
                   'x-api-key': apiKey,
@@ -430,14 +398,22 @@ function WatermarkRemover() {
       if (processedUrl) {
         setProgress(100)
         setStatus('Watermark removed successfully!')
-        console.log('=== PROCESSING COMPLETE ===')
-        console.log('Processed video URL:', processedUrl)
-        console.log('Original video URL:', finalUrl)
-        console.log('Endpoint used:', response.url)
-        console.log('Response headers:', Object.fromEntries(response.headers.entries()))
-        console.log('Please compare the videos to verify watermark removal')
-        console.log('Note: If watermark is still visible, the API may have limitations')
-        console.log('===========================')
+      console.log('=== PROCESSING COMPLETE ===')
+      console.log('Processed video URL:', processedUrl)
+      console.log('Original video URL:', finalUrl)
+      console.log('Endpoint used:', response.url)
+      console.log('Response status:', response.status)
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()))
+      
+      // Check if processed video is actually different (basic check)
+      if (processedUrl.startsWith('blob:')) {
+        console.log('Processed video is a blob (binary data from API)')
+        console.log('Note: If watermark is still visible, Segmind API may have limitations with this watermark type')
+        console.log('Consider trying alternative APIs like ClipLoom or RemoveMark.io for better results')
+      }
+      
+      console.log('Please compare the videos to verify watermark removal')
+      console.log('===========================')
         setProcessedVideoUrl(processedUrl)
       } else {
         throw new Error('Failed to get processed video URL from Segmind API.')

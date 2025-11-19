@@ -13,7 +13,7 @@ As an expert in AI and video watermark removal, I recommend **specialized waterm
 These APIs are specifically designed for watermark removal and typically provide the best results:
 
 #### 1. **Segmind Sora Watermark Remover** ⭐ **TOP PICK**
-- **API**: `https://api.segmind.com/v1/sora-wm-remover`
+- **API**: `https://api.segmind.com/v1/video-watermark-remover`
 - **Why Recommended**: 
   - Serverless, instant processing
   - High-quality results with maintained video fidelity
