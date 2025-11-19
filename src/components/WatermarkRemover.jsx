@@ -263,20 +263,66 @@ function WatermarkRemover() {
       console.log('Final URL being sent:', finalUrl)
       
       // Step 3: Call Segmind API for watermark removal
-      // Using the correct endpoint: video-watermark-remover
-      const response = await fetch('https://api.segmind.com/v1/video-watermark-remover', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          input_video: finalUrl,
-          base64: false
-        })
-      })
+      // Try v2 endpoint first (for longer processing), fallback to v1
+      // According to Segmind docs: v1 completes in <60s, v2 for longer processing
+      let response = null
+      let endpointUsed = ''
       
-      console.log('Segmind API request sent. Response status:', response.status)
+      // Try v2 first (video processing may take longer)
+      try {
+        endpointUsed = 'https://api.segmind.com/v2/video-watermark-remover'
+        console.log('Trying v2 endpoint (for longer processing):', endpointUsed)
+        response = await fetch(endpointUsed, {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            input_video: finalUrl,
+            base64: false
+          })
+        })
+        
+        if (!response.ok && response.status === 404) {
+          // v2 doesn't exist, try v1
+          console.log('v2 endpoint not found, trying v1')
+          endpointUsed = 'https://api.segmind.com/v1/video-watermark-remover'
+          response = await fetch(endpointUsed, {
+            method: 'POST',
+            headers: {
+              'x-api-key': apiKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              input_video: finalUrl,
+              base64: false
+            })
+          })
+        }
+      } catch (err) {
+        // If v2 fails, try v1
+        console.log('v2 endpoint error, trying v1:', err.message)
+        endpointUsed = 'https://api.segmind.com/v1/video-watermark-remover'
+        response = await fetch(endpointUsed, {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            input_video: finalUrl,
+            base64: false
+          })
+        })
+      }
+      
+      if (!response) {
+        throw new Error('Failed to get response from Segmind API')
+      }
+      
+      console.log('Segmind API request sent. Endpoint used:', endpointUsed)
+      console.log('Response status:', response.status)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: response.statusText }))
